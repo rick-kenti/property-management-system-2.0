@@ -43,17 +43,15 @@ class User(db.Model, SerializerMixin):
         return f"<User {self.username}>"
 
 
-class Property(db.Model, SerializerMixin):
+class Property(db.Model):
     __tablename__ = "properties"
-
-    serialize_rules = ("-user.properties", "-tenants.properties", "-rent_payments.property")
 
     id = db.Column(db.Integer, primary_key=True)
     name = db.Column(db.String(120), nullable=False)
     address = db.Column(db.String(255), nullable=False)
     city = db.Column(db.String(80), nullable=False)
     state = db.Column(db.String(80), nullable=False)
-    property_type = db.Column(db.String(50), nullable=False)  # apartment, house, commercial
+    property_type = db.Column(db.String(50), nullable=False)  # apartment, house, commercial, land
     num_units = db.Column(db.Integer, default=1)
     monthly_rent = db.Column(db.Float, nullable=False)
     description = db.Column(db.Text)
@@ -64,10 +62,12 @@ class Property(db.Model, SerializerMixin):
 
     # Relationships
     user = db.relationship("User", back_populates="properties")
-    rent_payments = db.relationship("RentPayment", back_populates="property", cascade="all, delete-orphan")
-
-    # Many-to-many: Property <-> Tenant through RentPayment
-    tenants = db.relationship("Tenant", secondary="rent_payments", viewonly=True)
+    rent_payments = db.relationship(
+        "RentPayment", back_populates="property", cascade="all, delete-orphan"
+    )
+    tenants = db.relationship(
+        "Tenant", secondary="rent_payments", viewonly=True
+    )
 
     @validates("monthly_rent")
     def validate_rent(self, key, value):
@@ -84,45 +84,24 @@ class Property(db.Model, SerializerMixin):
     def __repr__(self):
         return f"<Property {self.name}>"
 
+    # ✅ Safe JSON serialization for API
+    def to_dict(self):
+        return {
+            "id": self.id,
+            "name": self.name,
+            "address": self.address,
+            "city": self.city,
+            "state": self.state,
+            "property_type": self.property_type,
+            "num_units": self.num_units,
+            "monthly_rent": self.monthly_rent,
+            "description": self.description,
+            "created_at": self.created_at.isoformat() if self.created_at else None,
+            "user_id": self.user_id,
+            "tenant_ids": [t.id for t in self.tenants],
+            "rent_payment_ids": [r.id for r in self.rent_payments],
+        }
 
-# class Tenant(db.Model, SerializerMixin):
-#     __tablename__ = "tenants"
-
-#     serialize_rules = ("-properties.tenants", "-rent_payments.tenant")
-
-#     id = db.Column(db.Integer, primary_key=True)
-#     first_name = db.Column(db.String(80), nullable=False)
-#     last_name = db.Column(db.String(80), nullable=False)
-#     email = db.Column(db.String(120), unique=True, nullable=False)
-#     phone = db.Column(db.String(20), nullable=False)
-#     national_id = db.Column(db.String(50), unique=True)
-#     emergency_contact = db.Column(db.String(120))
-#     created_at = db.Column(db.DateTime, default=datetime.utcnow)
-
-#     # Many-to-many: Tenant <-> Property through RentPayment
-#     rent_payments = db.relationship("RentPayment", back_populates="tenant", cascade="all, delete-orphan")
-#     properties = db.relationship("Property", secondary="rent_payments", viewonly=True)
-
-#     @validates("email")
-#     def validate_email(self, key, value):
-#         pattern = r"^[\w\.-]+@[\w\.-]+\.\w{2,}$"
-#         if not re.match(pattern, value):
-#             raise ValueError("Invalid email format.")
-#         return value
-
-#     @validates("phone")
-#     def validate_phone(self, key, value):
-#         pattern = r"^\+?[\d\s\-]{7,15}$"
-#         if not re.match(pattern, value):
-#             raise ValueError("Invalid phone number format.")
-#         return value
-
-#     @property
-#     def full_name(self):
-#         return f"{self.first_name} {self.last_name}"
-
-#     def __repr__(self):
-#         return f"<Tenant {self.full_name}>"
 
 class Tenant(db.Model):
     __tablename__ = "tenants"
@@ -164,50 +143,6 @@ class Tenant(db.Model):
             "emergency_contact": self.emergency_contact,
             "created_at": self.created_at.isoformat() if self.created_at else None
         }
-
-# class RentPayment(db.Model, SerializerMixin):
-#     """
-#     Association table (many-to-many between Tenant and Property)
-#     with user-submittable attributes: amount_paid, payment_date, status, notes
-#     """
-#     __tablename__ = "rent_payments"
-
-#     serialize_rules = ("-tenant.rent_payments", "-property.rent_payments")
-
-#     id = db.Column(db.Integer, primary_key=True)
-
-#     # Foreign keys
-#     tenant_id = db.Column(db.Integer, db.ForeignKey("tenants.id"), nullable=False)
-#     property_id = db.Column(db.Integer, db.ForeignKey("properties.id"), nullable=False)
-
-#     # User-submittable attributes
-#     amount_paid = db.Column(db.Float, nullable=False)
-#     payment_date = db.Column(db.Date, nullable=False)
-#     due_date = db.Column(db.Date, nullable=False)
-#     status = db.Column(db.String(20), default="pending")  # paid, pending, overdue
-#     payment_method = db.Column(db.String(50), default="cash")  # cash, bank_transfer, mpesa
-#     notes = db.Column(db.Text)
-#     created_at = db.Column(db.DateTime, default=datetime.utcnow)
-
-#     # Relationships
-#     tenant = db.relationship("Tenant", back_populates="rent_payments")
-#     property = db.relationship("Property", back_populates="rent_payments")
-
-#     @validates("amount_paid")
-#     def validate_amount(self, key, value):
-#         if float(value) <= 0:
-#             raise ValueError("Amount paid must be a positive number.")
-#         return value
-
-#     @validates("status")
-#     def validate_status(self, key, value):
-#         allowed = ["paid", "pending", "overdue", "partial"]
-#         if value not in allowed:
-#             raise ValueError(f"Status must be one of: {', '.join(allowed)}")
-#         return value
-
-#     def __repr__(self):
-#         return f"<RentPayment Tenant:{self.tenant_id} Property:{self.property_id}>"
 
 class RentPayment(db.Model):
     __tablename__ = "rent_payments"
