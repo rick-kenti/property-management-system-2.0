@@ -12,6 +12,9 @@ from datetime import datetime
 # ─────────────────────────────────────────────
 #  AUTH ROUTES
 # ─────────────────────────────────────────────
+@app.route("/")
+def index():
+    return jsonify({"message":"welcome to property management"})
 
 @app.route("/api/auth/register", methods=["POST"])
 def register():
