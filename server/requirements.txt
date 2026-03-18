@@ -6,3 +6,5 @@ flask-bcrypt
 flask-jwt-extended
 sqlalchemy-serializer
 python-dotenv
+psycopg2-binary
+gunicorn
